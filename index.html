@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auscultation LGV — Tunnel Aïn Harouda</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="brand">
+    <div class="brand-title">AUSCULTATION</div>
+    <div class="brand-sub">LGV Aïn Harouda</div>
+  </div>
+  <nav>
+    <button class="nav-btn active" data-view="dashboard">Tableau de bord</button>
+    <button class="nav-btn" data-view="map">Carte</button>
+    <button class="nav-btn" data-view="calculs">Calculs</button>
+    <button class="nav-btn" data-view="import">Importer campagne</button>
+    <button class="nav-btn" data-view="mesures">Mesures brutes</button>
+    <button class="nav-btn" data-view="cibles">Cibles (état 0)</button>
+    <button class="nav-btn" data-view="rapport">Rapport (PDF)</button>
+    <button class="nav-btn" data-view="parametres">Paramètres</button>
+  </nav>
+  <div class="sidebar-footer">
+    <button id="btn-export" class="btn-ghost">Exporter projet (JSON)</button>
+    <button id="btn-import-json" class="btn-ghost">Importer projet</button>
+    <button id="btn-reset" class="btn-ghost btn-danger">Réinitialiser</button>
+    <input type="file" id="file-import-json" accept=".json" hidden>
+  </div>
+</aside>
+
+<main>
+  <header class="topbar">
+    <h1 id="view-title">Tableau de bord</h1>
+    <div class="topbar-meta">
+      <span id="meta-projet"></span>
+    </div>
+  </header>
+
+  <!-- ============ TABLEAU DE BORD ============ -->
+  <section class="view" id="view-dashboard">
+    <div class="filters">
+      <label>Campagne
+        <select id="dash-campagne"></select>
+      </label>
+      <label>Côté
+        <select id="dash-cote">
+          <option value="Tous">Tous</option>
+          <option value="Rabat">Rabat</option>
+          <option value="Casa">Casa</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-label">Cibles mesurées</div><div class="kpi-value" id="kpi-total">—</div></div>
+      <div class="kpi kpi-good"><div class="kpi-label">Plani tolérables</div><div class="kpi-value" id="kpi-plani-ok">—</div></div>
+      <div class="kpi kpi-bad"><div class="kpi-label">Plani hors seuil</div><div class="kpi-value" id="kpi-plani-ko">—</div></div>
+      <div class="kpi kpi-good"><div class="kpi-label">Alti tolérables</div><div class="kpi-value" id="kpi-alti-ok">—</div></div>
+      <div class="kpi kpi-bad"><div class="kpi-label">Alti hors seuil</div><div class="kpi-value" id="kpi-alti-ko">—</div></div>
+      <div class="kpi"><div class="kpi-label">Δ plani max (mm)</div><div class="kpi-value" id="kpi-plani-max">—</div></div>
+      <div class="kpi"><div class="kpi-label">|ΔZ| max (mm)</div><div class="kpi-value" id="kpi-alti-max">—</div></div>
+    </div>
+
+    <div class="charts">
+      <div class="chart-card">
+        <h3>Déplacement planimétrique (mm)</h3>
+        <canvas id="chart-plani"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>Variation altimétrique ΔZ (mm)</h3>
+        <canvas id="chart-alti"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Cibles de la campagne</h3>
+      <table class="table" id="dash-table">
+        <thead><tr><th>Cible</th><th>Côté</th><th>Δ plani (mm)</th><th>ΔZ (mm)</th><th>Δ 3D (mm)</th><th>Statut plani</th><th>Statut alti</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ CARTE ============ -->
+  <section class="view hidden" id="view-map">
+    <div class="filters">
+      <label>Campagne <select id="map-campagne"></select></label>
+      <label>Côté
+        <select id="map-cote">
+          <option value="Tous">Tous</option>
+          <option value="Rabat">Rabat</option>
+          <option value="Casa">Casa</option>
+        </select>
+      </label>
+      <label>Fond
+        <select id="map-base">
+          <option value="sat">Satellite</option>
+          <option value="osm">Plan OSM</option>
+        </select>
+      </label>
+    </div>
+    <div id="map"></div>
+    <div class="legend">
+      <span><i style="background:#28a745"></i>Tolérable</span>
+      <span><i style="background:#dc3545"></i>Non tolérable</span>
+      <span><i style="background:#6c757d"></i>Pas de mesure</span>
+    </div>
+  </section>
+
+  <!-- ============ CALCULS ============ -->
+  <section class="view hidden" id="view-calculs">
+    <div class="filters">
+      <label>Campagne <select id="calc-campagne"><option value="">Toutes</option></select></label>
+      <label>Côté
+        <select id="calc-cote">
+          <option value="Tous">Tous</option>
+          <option value="Rabat">Rabat</option>
+          <option value="Casa">Casa</option>
+        </select>
+      </label>
+    </div>
+    <div class="card">
+      <table class="table" id="table-calculs">
+        <thead><tr>
+          <th>Camp.</th><th>Cible</th><th>Côté</th>
+          <th>X mes.</th><th>Y mes.</th><th>Z mes.</th>
+          <th>ΔX (mm)</th><th>ΔY (mm)</th><th>ΔZ (mm)</th>
+          <th>Δ plani (mm)</th><th>Δ 3D (mm)</th>
+          <th>Statut plani</th><th>Statut alti</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ IMPORT ============ -->
+  <section class="view hidden" id="view-import">
+    <div class="card">
+      <h3>Importer une campagne</h3>
+      <p class="hint">Format attendu (1 ligne par cible, séparateur espace) :<br>
+        <code>R1.X 313104.050 341205.610 43.534</code></p>
+
+      <div class="form-row">
+        <label>N° de campagne
+          <input type="number" id="imp-campagne" min="1" value="1">
+        </label>
+        <label>Date du levé
+          <input type="date" id="imp-date">
+        </label>
+        <label>Remarque
+          <input type="text" id="imp-remarque" placeholder="Import auto, vent fort…">
+        </label>
+      </div>
+
+      <div class="dropzone" id="dropzone">
+        <p>Glisse un fichier <b>.txt</b> ici, ou clique pour choisir</p>
+        <input type="file" id="file-input" accept=".txt,.csv" hidden>
+      </div>
+
+      <p class="hint">— ou colle directement le contenu —</p>
+      <textarea id="imp-textarea" rows="8" placeholder="R1.X 313104.050 341205.610 43.534&#10;R2.X 313100.696 341201.995 43.464"></textarea>
+
+      <div class="actions">
+        <button class="btn-primary" id="btn-import">Importer</button>
+        <button class="btn-ghost" id="btn-preview" style="border:1px solid #cbd5e1; color:#1f2937">Aperçu (sans importer)</button>
+        <span id="imp-status" class="status"></span>
+      </div>
+    </div>
+    <div id="imp-report"></div>
+  </section>
+
+  <!-- ============ MESURES BRUTES ============ -->
+  <section class="view hidden" id="view-mesures">
+    <div class="filters">
+      <label>Campagne <select id="mes-campagne"><option value="">Toutes</option></select></label>
+      <button class="btn-danger" id="btn-suppr-camp">Supprimer cette campagne</button>
+    </div>
+    <div class="card">
+      <table class="table" id="table-mesures">
+        <thead><tr>
+          <th>N° Camp.</th><th>Cible</th><th>X (m)</th><th>Y (m)</th><th>Z (m)</th><th>Date</th><th>Remarque</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ CIBLES ============ -->
+  <section class="view hidden" id="view-cibles">
+    <div class="card">
+      <div class="card-head">
+        <h3>Inventaire des cibles — État 0 (référence)</h3>
+        <button class="btn-primary" id="btn-add-cible">+ Ajouter cible</button>
+      </div>
+      <table class="table" id="table-cibles">
+        <thead><tr>
+          <th>ID</th><th>Côté</th><th>Position</th>
+          <th>X₀ (m)</th><th>Y₀ (m)</th><th>Z₀ (m)</th>
+          <th>Date pose</th><th>Statut</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ RAPPORT ============ -->
+  <section class="view hidden" id="view-rapport">
+    <div class="filters no-print">
+      <label>Campagne <select id="rap-campagne"></select></label>
+      <label>Côté
+        <select id="rap-cote">
+          <option value="Casa">Côté Casa</option>
+          <option value="Rabat">Côté Rabat</option>
+        </select>
+      </label>
+      <button class="btn-primary" onclick="window.print()">Imprimer / PDF</button>
+    </div>
+    <div id="rapport-render"></div>
+  </section>
+
+  <!-- ============ PARAMÈTRES ============ -->
+  <section class="view hidden" id="view-parametres">
+    <div class="card">
+      <h3>Paramètres du projet</h3>
+      <div class="form-grid">
+        <label>Projet<input id="p-projet"></label>
+        <label>Maître d'ouvrage<input id="p-mo"></label>
+        <label>Constructeur<input id="p-cons"></label>
+        <label>Marché N°<input id="p-marche"></label>
+        <label>PK début<input id="p-pkd"></label>
+        <label>PK fin<input id="p-pkf"></label>
+        <label>Date mise en service<input type="date" id="p-mes"></label>
+        <label>Référentiel géodésique<input id="p-ref"></label>
+        <label>Opérateur principal<input id="p-op"></label>
+        <label>Lot<input id="p-lot"></label>
+        <label>Ouvrage<input id="p-ouvrage"></label>
+        <label>Zone<input id="p-zone"></label>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Seuils d'auscultation (mm)</h3>
+      <div class="form-row">
+        <label>Tolérance planimétrie ΔXY<input type="number" id="p-tol-xy" step="0.1"></label>
+        <label>Tolérance altimétrie |ΔZ|<input type="number" id="p-tol-z" step="0.1"></label>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Signataires</h3>
+      <div class="form-grid">
+        <label>Contrôle interne — Nom<input id="p-int-nom"></label>
+        <label>Contrôle interne — Qualité<input id="p-int-qual"></label>
+        <label>Contrôle externe — Nom<input id="p-ext-nom"></label>
+        <label>Contrôle externe — Qualité<input id="p-ext-qual"></label>
+        <label>Contrôle extérieur — Nom<input id="p-eer-nom"></label>
+        <label>Contrôle extérieur — Qualité<input id="p-eer-qual"></label>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn-primary" id="btn-save-params">Enregistrer</button>
+      <span id="param-status" class="status"></span>
+    </div>
+  </section>
+</main>
+
+<!-- Modal cible -->
+<div class="modal hidden" id="modal-cible">
+  <div class="modal-body">
+    <h3 id="modal-title">Cible</h3>
+    <div class="form-grid">
+      <label>ID<input id="m-id"></label>
+      <label>Côté
+        <select id="m-cote"><option>Rabat</option><option>Casa</option></select>
+      </label>
+      <label>Position<input id="m-pos" value="Bord autoroute"></label>
+      <label>X₀ (m)<input type="number" step="0.001" id="m-x"></label>
+      <label>Y₀ (m)<input type="number" step="0.001" id="m-y"></label>
+      <label>Z₀ (m)<input type="number" step="0.001" id="m-z"></label>
+      <label>Date pose<input type="date" id="m-date"></label>
+      <label>Statut
+        <select id="m-statut"><option>Active</option><option>Inactive</option></select>
+      </label>
+    </div>
+    <div class="actions">
+      <button class="btn-primary" id="m-save">Enregistrer</button>
+      <button class="btn-ghost" id="m-cancel">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
